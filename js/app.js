@@ -212,6 +212,7 @@ async function showSettings() {
         </label>
         <p class="muted small">La clé reste sur cet appareil et part uniquement vers ${esc(provider.label)}. <a href="${esc(provider.keyUrl)}" rel="noopener" target="_blank">Créer une clé</a></p>
         <button class="secondary" id="checkKey">Enregistrer et vérifier la clé</button>
+        <button class="secondary" id="testCall">Faire un test réel (1 appel)</button>
         <p class="small" id="keyStatus" role="status"></p>
       </section>
       <section class="panel">
@@ -250,6 +251,30 @@ async function showSettings() {
     } catch (err) {
       status.textContent = `Clé enregistrée, mais : ${err.message}`;
     }
+  });
+  $('testCall').addEventListener('click', async (e) => {
+    const key = settings.aiKeys[provider.id];
+    const status = $('keyStatus');
+    if (!key) { status.textContent = 'Enregistre d\'abord ta clé.'; return; }
+    const model = settings.aiModel ?? provider.models[0].id;
+    e.currentTarget.disabled = true;
+    const button = e.currentTarget;
+    status.textContent = `Test de ${model} en cours…`;
+    const started = performance.now();
+    try {
+      await provider.generateJson({
+        system: 'Réponds brièvement en français.',
+        prompt: 'Dis bonjour à un joueur d\'échecs en une phrase.',
+        schema: { type: 'object', properties: { texte: { type: 'string' } }, required: ['texte'] },
+        formatHint: 'Réponds uniquement en JSON avec le champ "texte".',
+      }, { key, model });
+      const seconds = ((performance.now() - started) / 1000).toFixed(1).replace('.', ',');
+      if ($('keyStatus')) status.textContent = `Réussi : ${model} a répondu en ${seconds} s.`;
+    } catch (err) {
+      const seconds = ((performance.now() - started) / 1000).toFixed(0);
+      if ($('keyStatus')) status.textContent = `Échec de ${model} après ${seconds} s : ${err.message}`;
+    }
+    button.disabled = false;
   });
   $('wipe').addEventListener('click', async () => {
     if (!confirm('Effacer toutes les analyses enregistrées sur ce téléphone ?')) return;

@@ -69,9 +69,8 @@ Règles obligatoires :
 - Si les données ne suffisent pas à expliquer un moment, reste général et dis-le simplement.
 - Pour chaque moment, écris une ou deux phrases : ce qui s'est passé et l'idée à retenir.
 - Réponds pour chaque valeur de "ply" reçue.
-
-Réponds uniquement en JSON, sous cette forme :
-{"resume": "résumé de la partie en deux phrases", "moments": [{"ply": 12, "explication": "..."}]}`;
+- Sois concis, donne ta réponse une seule fois et ne te répète pas.
+- Dans les textes, les seuls échappements permis sont \\\\, \\n et \\". Écris les accents directement en UTF-8.`;
 }
 
 function buildPrompt(game, parsed, moments, evals, openingTitle) {
@@ -127,6 +126,7 @@ export function runCoach({ game, parsed, reviewed, evals, openingTitle, settings
       system: buildSystem(game),
       prompt: buildPrompt(game, parsed, moments, evals, openingTitle),
       schema: SCHEMA,
+      formatHint: 'Réponds uniquement en JSON avec "resume" (deux phrases) et "moments" (liste de "ply" et "explication").',
     }, { key, model });
 
     const allowed = allowedMoves(parsed, moments, evals);

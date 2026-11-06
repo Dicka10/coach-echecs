@@ -9,6 +9,8 @@ export class AiError extends Error {
 }
 
 const REQUEST_TIMEOUT_MS = 90000;
+// Coupe net une réponse qui part en boucle. La réflexion du modèle compte dans cette limite.
+const MAX_OUTPUT_TOKENS = 8192;
 
 async function send(url, options) {
   const controller = new AbortController();
@@ -16,7 +18,9 @@ async function send(url, options) {
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (err) {
-    if (err.name === 'AbortError') throw new AiError('network', 'L\'IA met trop de temps à répondre. Réessaie.');
+    if (err.name === 'AbortError') {
+      throw new AiError('timeout', 'L\'IA met trop de temps à répondre. Garde l\'écran allumé pendant l\'attente, ou essaie l\'autre modèle.');
+    }
     throw new AiError('network', 'Connexion à l\'IA impossible. Vérifie ton accès à Internet.');
   } finally {
     clearTimeout(timer);
@@ -56,6 +60,9 @@ async function geminiError(res) {
 function geminiText(data) {
   if (data?.promptFeedback?.blockReason) throw new AiError('blocked', 'Gemini a bloqué cette demande. Réessaie plus tard.');
   const candidate = data?.candidates?.[0];
+  if (candidate?.finishReason === 'MAX_TOKENS') {
+    throw new AiError('format', 'La réponse de Gemini a été coupée car elle était trop longue. Réessaie ou essaie l\'autre modèle.');
+  }
   const text = (candidate?.content?.parts ?? [])
     .filter((part) => !part.thought && typeof part.text === 'string')
     .map((part) => part.text)
@@ -71,8 +78,8 @@ const gemini = {
   label: 'Google Gemini',
   keyUrl: 'https://aistudio.google.com/apikey',
   models: [
-    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (meilleure qualité)' },
-    { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite (quota plus large)' },
+    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (meilleure qualité)', short: 'Flash' },
+    { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite (quota plus large)', short: 'Flash-Lite' },
   ],
 
   // Ne consomme pas de quota de génération. Google précise qu'elle valide l'existence de la clé.
@@ -81,26 +88,24 @@ const gemini = {
     if (!res.ok) throw await geminiError(res);
   },
 
-  async generateJson({ system, prompt, schema }, { key, model }) {
-    const post = (generationConfig) => send(`${GEMINI_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
+  async generateJson({ system, prompt, schema, formatHint = '' }, { key, model }) {
+    const post = (instructions, generationConfig) => send(`${GEMINI_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
+        systemInstruction: { parts: [{ text: instructions }] },
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig,
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: MAX_OUTPUT_TOKENS, ...generationConfig },
       }),
     });
-    let res = await post({
-      responseMimeType: 'application/json',
-      responseJsonSchema: schema,
-      thinkingConfig: { thinkingLevel: 'LOW' },
-    });
+    // Le format est donné par le schéma seul : Google déconseille de préciser l'ordre des champs
+    // dans le texte, car cela peut faire boucler la réponse.
+    let res = await post(system, { responseJsonSchema: schema, thinkingConfig: { thinkingLevel: 'LOW' } });
     if (!res.ok) {
       const error = await geminiError(res);
       if (error.kind !== 'request') throw error;
       // Un réglage refusé ne produit aucune réponse : on redemande avec le JSON seul.
-      res = await post({ responseMimeType: 'application/json' });
+      res = await post(`${system}\n\n${formatHint}`, {});
       if (!res.ok) throw await geminiError(res);
     }
     const text = geminiText(await res.json());

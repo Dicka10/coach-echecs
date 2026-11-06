@@ -1,4 +1,5 @@
 // Écran d'analyse d'une partie.
+import { PROVIDERS } from './ai.js';
 import { analyzer, buildReview, ENGINE_NAME, isComplete, parseGame, summarize } from './analyzer.js';
 import { createBoard } from './board.js';
 import { renderChart } from './chart.js';
@@ -224,11 +225,20 @@ export async function showReview(root, game, settings, helpers) {
     } catch (err) {
       console.error(err);
       coach.error = err.message || 'Le coach n\'a pas pu répondre.';
+      coach.errorKind = err.kind;
     }
     coach.loading = false;
     if (!root.isConnected) return;
     renderCoach();
     renderPosition();
+  }
+
+  // Autre modèle du même fournisseur, proposé quand l'appel échoue sans que la clé soit en cause.
+  function otherModel() {
+    if (!['timeout', 'format', 'quota', 'server', 'blocked'].includes(coach.errorKind)) return null;
+    const { models } = PROVIDERS[settings.aiProvider];
+    const current = settings.aiModel ?? models[0].id;
+    return models.find((m) => m.id !== current) ?? null;
   }
 
   async function copyForClaude(button) {
@@ -257,11 +267,18 @@ export async function showReview(root, game, settings, helpers) {
     } else if (!coachReady(settings)) {
       body = '<p class="muted">Ajoute ta clé Gemini dans les réglages pour obtenir les explications. L\'analyse Stockfish reste disponible sans clé.</p><a class="link" href="#/reglages">Ouvrir les réglages</a>';
     } else {
+      const other = otherModel();
       body = `${coach.error ? `<p class="error">${esc(coach.error)}</p>` : ''}
-        <button class="primary" id="askCoach">${coach.error ? 'Réessayer' : 'Explications du coach'}</button>`;
+        <button class="primary" id="askCoach">${coach.error ? 'Réessayer' : 'Explications du coach'}</button>
+        ${other ? `<button class="secondary" id="otherModel">Essayer avec ${esc(other.short)}</button>` : ''}`;
     }
     panel.innerHTML = `<h2>Coach</h2>${body}<button class="secondary" id="copyClaude">Copier pour Claude</button>`;
     panel.querySelector('#askCoach')?.addEventListener('click', askCoach);
+    panel.querySelector('#otherModel')?.addEventListener('click', async () => {
+      settings.aiModel = otherModel().id;
+      await db.kvSet('aiModel', settings.aiModel);
+      askCoach();
+    });
     panel.querySelector('#copyClaude').addEventListener('click', (e) => copyForClaude(e.currentTarget));
   }
 
