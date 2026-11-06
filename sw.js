@@ -1,5 +1,5 @@
 // Augmenter VERSION à chaque déploiement : c'est ce qui déclenche « Nouvelle version disponible ».
-const VERSION = '0.1.7';
+const VERSION = '0.2.0';
 const CACHE = `coach-echecs-${VERSION}`;
 
 const PIECES = ['K', 'Q', 'R', 'B', 'N', 'P'].flatMap((p) => [`vendor/pieces/w${p}.svg`, `vendor/pieces/b${p}.svg`]);
@@ -13,11 +13,14 @@ const FILES = [
   'js/board.js',
   'js/chart.js',
   'js/chesscom.js',
+  'js/classify.js',
   'js/db.js',
   'js/engine.js',
   'js/lichess.js',
+  'js/openings.js',
   'js/review.js',
   'js/ui.js',
+  'data/openings.json',
   'vendor/chess.js',
   'vendor/stockfish-19-lite-single.js',
   'vendor/stockfish-19-lite-single.wasm',

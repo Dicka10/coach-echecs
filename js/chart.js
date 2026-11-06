@@ -1,6 +1,6 @@
 // Courbe de mes chances de gain, de 0 à 100 %, centrée sur mon point de vue.
 const NS = 'http://www.w3.org/2000/svg';
-const SEVERE = new Set(['inaccuracy', 'mistake', 'blunder']);
+const SEVERE = new Set(['brilliant', 'great', 'inaccuracy', 'mistake', 'miss', 'blunder']);
 
 export function renderChart(container, { points, marks, current, total, onSelect }) {
   const width = Math.max(container.clientWidth, 200);

@@ -1,12 +1,13 @@
 // Écran d'analyse d'une partie.
 import { Chess } from '../vendor/chess.js';
-import { analyzer, buildReview, parseGame, summarize } from './analyzer.js';
+import { analyzer, buildReview, isComplete, parseGame, summarize } from './analyzer.js';
 import { createBoard } from './board.js';
 import { renderChart } from './chart.js';
 import { openingName } from './chesscom.js';
 import * as db from './db.js';
 import { winPercent } from './lichess.js';
-import { cadence, esc, CLASSES, fmtDate, fmtPct } from './ui.js';
+import { bookInfo, describeOpening, loadBook, openingGenre } from './openings.js';
+import { BAD_CLASSES, cadence, esc, CLASSES, fmtDate, fmtPct } from './ui.js';
 
 const FIGURES = { K: '♚', Q: '♛', R: '♜', B: '♝', N: '♞' };
 const figurine = (san) => san.replace(/[KQRBN]/g, (c) => `${FIGURES[c]}︎`);
@@ -38,7 +39,11 @@ export async function showReview(root, game, settings, helpers) {
   const my = game.color;
   let doc = await db.get('analyses', game.uuid);
   let evals = doc?.evals ?? new Array(total + 1).fill(null);
-  let reviewed = buildReview(parsed, evals);
+  const book = await loadBook();
+  const opening = bookInfo(parsed, book);
+  const memo = new Map();
+  const review = () => buildReview(parsed, evals, book, my, memo);
+  let reviewed = review();
   let ply = 0;
 
   const resultWord = { win: 'Victoire', loss: 'Défaite', draw: 'Nulle' }[game.result];
@@ -75,13 +80,17 @@ export async function showReview(root, game, settings, helpers) {
           <p class="muted small">Point plein : ton coup. Rond vide : coup adverse.</p></section>
         <section class="panel" id="summary"></section>
         <section class="panel"><h2>Coups</h2><div class="moves" id="moves"></div></section>
-        <p class="opening" id="opening"></p>
       </div>
     </main>`;
 
   const $ = (id) => root.querySelector(`#${id}`);
   const board = createBoard($('board'), my);
-  $('opening').textContent = `${openingName(game)}${gameEco(game)}`;
+
+  // Le nom le plus précis trouvé dans la base, sinon celui donné par Chess.com.
+  function gameOpening() {
+    const [eco, name] = opening.last?.split('|') ?? [];
+    return { eco: eco ?? gameEco(game), name: name ?? openingName(game) };
+  }
 
   function points() {
     const list = [];
@@ -90,13 +99,13 @@ export async function showReview(root, game, settings, helpers) {
   }
 
   function myMistakes() {
-    return reviewed.filter((r) => r && r.color === my && ['inaccuracy', 'mistake', 'blunder'].includes(r.cls));
+    return reviewed.filter((r) => r && r.color === my && BAD_CLASSES.has(r.cls));
   }
 
   function renderPosition() {
     const move = ply > 0 ? parsed.moves[ply - 1] : null;
     const info = ply > 0 ? reviewed[ply - 1] : null;
-    const isBad = info && ['inaccuracy', 'mistake', 'blunder'].includes(info.cls);
+    const isBad = info && BAD_CLASSES.has(info.cls);
     let arrow = null;
     if (isBad && info.best) arrow = { from: info.best.slice(0, 2), to: info.best.slice(2, 4) };
     board.render({
@@ -131,7 +140,14 @@ export async function showReview(root, game, settings, helpers) {
   function renderMoveInfo(move, info) {
     const e = evals[ply];
     if (!move) {
-      $('moveinfo').innerHTML = '<h2>Position de départ</h2><p class="muted">Avance coup par coup ou touche la courbe.</p>';
+      const { eco, name } = gameOpening();
+      const described = describeOpening(name);
+      const genre = openingGenre(parsed.moves);
+      $('moveinfo').innerHTML = `
+        <div class="move-head"><h2>${esc(described.title)}</h2><span class="muted">${esc(eco)}</span></div>
+        ${described.variation ? `<p class="muted">${esc(described.variation)}</p>` : ''}
+        <span class="genre">${esc(genre.label)}</span>
+        <p>${esc(described.description || genre.hint)}</p>`;
       return;
     }
     const number = Math.ceil(ply / 2);
@@ -145,11 +161,19 @@ export async function showReview(root, game, settings, helpers) {
     const beforePct = winPercent(evals[ply - 1].s, my);
     const afterPct = winPercent(e.s, my);
     let best = '';
-    if (['inaccuracy', 'mistake', 'blunder'].includes(info.cls) && info.best) {
+    if (BAD_CLASSES.has(info.cls) && info.best) {
       const san = pvToSan(parsed.fens[ply - 1], info.pv || info.best);
       if (san.length) {
         best = `<p class="best">Meilleur coup : <strong>${figurine(esc(san[0]))}</strong></p>
           ${san.length > 1 ? `<p class="line">Suite : ${figurine(esc(san.join(' ')))}</p>` : ''}`;
+      }
+    }
+    let note = info.note;
+    if (info.cls === 'book') {
+      const name = opening.names[ply]?.split('|')[1];
+      if (name) {
+        const described = describeOpening(name);
+        note = `Théorie : ${described.title}${described.variation ? `, ${described.variation}` : ''}.`;
       }
     }
     $('moveinfo').innerHTML = `
@@ -157,6 +181,7 @@ export async function showReview(root, game, settings, helpers) {
         <h2>${prefix} ${figurine(esc(move.san))}</h2>
         <span class="tag cls-${info.cls}">${cls.symbol} ${cls.label}</span>
       </div>
+      <p class="note">${esc(note)}</p>
       <p class="muted">${who} · Mes chances : ${fmtPct(beforePct)} → ${fmtPct(afterPct)} · Éval. ${evalText(e.s, my)}</p>
       ${best}`;
   }
@@ -179,7 +204,7 @@ export async function showReview(root, game, settings, helpers) {
     const opp = counts[my === 'w' ? 'b' : 'w'];
     const accMine = accuracy?.[my];
     const accOpp = accuracy?.[my === 'w' ? 'b' : 'w'];
-    const rows = ['best', 'good', 'inaccuracy', 'mistake', 'blunder'].map((key) => `
+    const rows = Object.keys(CLASSES).map((key) => `
       <div class="count-row">
         <span class="tag cls-${key}">${CLASSES[key].symbol} ${CLASSES[key].label}</span>
         <strong>${mine[key]}</strong><span class="muted">${opp[key]}</span>
@@ -191,8 +216,8 @@ export async function showReview(root, game, settings, helpers) {
       </div>
       <div class="count-row count-head"><span></span><span>Moi</span><span>Adv.</span></div>
       ${rows}
-      <p class="muted small">Méthode Lichess · ${doc ? `Profondeur ${doc.depth}` : ''}</p>
-      ${doc?.status === 'done' && settings.depth > doc.depth
+      <p class="muted small">Précision : méthode Lichess · Catégories proches de Chess.com${doc ? ` · Profondeur ${doc.depth}` : ''}</p>
+      ${isComplete(doc) && settings.depth > doc.depth
         ? `<button class="link" id="deeper">Réanalyser en profondeur ${settings.depth}</button>` : ''}`;
     root.querySelector('#deeper')?.addEventListener('click', async () => {
       await db.del('analyses', game.uuid);
@@ -215,8 +240,7 @@ export async function showReview(root, game, settings, helpers) {
   function renderStatus() {
     const job = analyzer.job?.uuid === game.uuid ? analyzer.job : null;
     const status = $('status');
-    const done = doc?.status === 'done';
-    if (done) { status.hidden = true; return; }
+    if (isComplete(doc)) { status.hidden = true; return; }
     status.hidden = false;
     if (job?.error) {
       status.innerHTML = `<p>${esc(job.error)}</p><button class="primary" id="resume">Reprendre</button>`;
@@ -262,7 +286,7 @@ export async function showReview(root, game, settings, helpers) {
   async function refreshFromStore() {
     doc = await db.get('analyses', game.uuid);
     if (doc) evals = doc.evals;
-    reviewed = buildReview(parsed, evals);
+    reviewed = review();
     renderStatus();
     renderSummary();
     renderMoves();
@@ -289,7 +313,7 @@ export async function showReview(root, game, settings, helpers) {
   renderPosition();
 
   // Lance ou reprend seule l'analyse manquante : une partie terminée n'est jamais recalculée.
-  if (doc?.status !== 'done' && !analyzer.isRunning(game.uuid)) {
+  if (!isComplete(doc) && !analyzer.isRunning(game.uuid)) {
     analyzer.start(game, { depth: doc?.depth ?? settings.depth });
   }
 
@@ -301,6 +325,5 @@ export async function showReview(root, game, settings, helpers) {
 }
 
 function gameEco(game) {
-  const eco = /\[ECO "([^"]+)"\]/.exec(game.pgn)?.[1];
-  return eco ? ` (${eco})` : '';
+  return /\[ECO "([^"]+)"\]/.exec(game.pgn)?.[1] ?? '';
 }

@@ -183,11 +183,18 @@ button:disabled { opacity: .5; }
 .best { margin-top: 4px; }
 .line { font-size: .85rem; color: var(--muted); overflow-wrap: anywhere; }
 
+.cls-brilliant { --tone: #35c9c1; }
+.cls-great { --tone: #6aa9e9; }
 .cls-best { --tone: var(--best); }
+.cls-excellent { --tone: #93cf72; }
 .cls-good { --tone: var(--good); }
+.cls-book { --tone: #c2a07a; }
 .cls-inaccuracy { --tone: var(--inaccuracy); }
 .cls-mistake { --tone: var(--mistake); }
+.cls-miss { --tone: #ee8fb4; }
 .cls-blunder { --tone: var(--blunder); }
+.note { font-weight: 600; }
+.genre { align-self: flex-start; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: var(--surface-2); }
 .tag {
   flex: none; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700;
   color: #111; background: var(--tone); white-space: nowrap;

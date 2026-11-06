@@ -2,6 +2,7 @@
 import { analyzer, ENGINE_NAME } from './analyzer.js';
 import { ChessComError, listGames, loadOlder, openingName, refresh } from './chesscom.js';
 import * as db from './db.js';
+import { describeOpening } from './openings.js';
 import { showReview } from './review.js';
 import { cadence, esc, fmtDate, fmtPct } from './ui.js';
 
@@ -108,7 +109,7 @@ async function showHome() {
         <span class="result ${g.result}" aria-label="${g.result}">${labels[g.result]}</span>
         <span class="game-main">
           <strong>${esc(g.opponent)} <small>${esc(g.oppRating)}</small></strong>
-          <small class="muted">${esc(openingName(g))}</small>
+          <small class="muted">${esc(describeOpening(openingName(g)).title)}</small>
           <small class="muted">${esc(cadence(g.time_class))} · ${fmtDate(g.end_time)}</small>
         </span>
         <span class="game-side">${acc != null ? `<strong>${fmtPct(acc, 1)}</strong>` : ''}${badgeFor(a, job)}</span>
@@ -197,7 +198,8 @@ async function showSettings() {
       </section>
       <section class="panel">
         <h2>À propos</h2>
-        <p class="muted small" id="about">${esc(ENGINE_NAME)} · Méthode Lichess</p>
+        <p class="muted small" id="about">${esc(ENGINE_NAME)}</p>
+        <p class="muted small">Précision : méthode Lichess. Catégories : seuils publics de Chess.com, avec des règles propres à cette appli pour Génial, Très bon et Occasion manquée. Les résultats peuvent donc différer de Chess.com. Ouvertures : base libre de Lichess.</p>
         <p class="muted small"><a href="https://github.com/Dicka10/coach-echecs" rel="noopener">Logiciel libre</a> sous licence AGPL-3.0. <a href="https://github.com/official-stockfish/Stockfish" rel="noopener">Stockfish</a>, <a href="https://github.com/nmrugg/stockfish.js" rel="noopener">stockfish.js</a>, <a href="https://github.com/jhlywa/chess.js" rel="noopener">chess.js</a>.</p>
       </section>
     </main>`);

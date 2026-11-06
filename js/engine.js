@@ -70,14 +70,15 @@ export class Engine {
   }
 
   // position : commande UCI complète. turn : 'w' ou 'b'.
-  async analyse(position, turn, { depth, movetime }) {
+  async analyse(position, turn, { depth, movetime, searchmoves }) {
     let best = null;
     const onInfo = (line) => {
       const parsed = parseInfo(line);
       if (parsed) best = parsed;
     };
     this.send(position);
-    this.send(`go depth ${depth} movetime ${movetime}`);
+    const restrict = searchmoves?.length ? ` searchmoves ${searchmoves.join(' ')}` : '';
+    this.send(`go depth ${depth} movetime ${movetime}${restrict}`);
     const final = await this.waitFor('bestmove', onInfo);
     const move = final.split(/\s+/)[1];
     if (!best) throw new Error('Aucune évaluation reçue du moteur');
