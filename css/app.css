@@ -194,6 +194,12 @@ button:disabled { opacity: .5; }
 .cls-miss { --tone: #ee8fb4; }
 .cls-blunder { --tone: var(--blunder); }
 .note { font-weight: 600; }
+.coach-text { margin-top: 4px; padding: 8px 10px; background: var(--surface-2); border-radius: 8px; font-size: .92rem; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
+.field select, .field input {
+  min-height: 46px; padding: 0 12px; font-size: 16px; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+}
 .genre { align-self: flex-start; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: var(--surface-2); }
 .tag {
   flex: none; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700;

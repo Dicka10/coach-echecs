@@ -60,5 +60,6 @@ export async function putMany(store, values) {
   });
 }
 
-export const kvGet = (key, fallback) => get('kv', key).then((v) => (v === undefined ? fallback : v));
+export const kvKeys = () => run('kv', 'readonly', (s) => s.getAllKeys());
+export const kvGet =(key, fallback) => get('kv', key).then((v) => (v === undefined ? fallback : v));
 export const kvSet = (key, value) => put('kv', value, key);

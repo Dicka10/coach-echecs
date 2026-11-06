@@ -1,5 +1,5 @@
 // Augmenter VERSION à chaque déploiement : c'est ce qui déclenche « Nouvelle version disponible ».
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 const CACHE = `coach-echecs-${VERSION}`;
 
 const PIECES = ['K', 'Q', 'R', 'B', 'N', 'P'].flatMap((p) => [`vendor/pieces/w${p}.svg`, `vendor/pieces/b${p}.svg`]);
@@ -8,15 +8,19 @@ const FILES = [
   'index.html',
   'manifest.webmanifest',
   'css/app.css',
+  'js/ai.js',
   'js/analyzer.js',
   'js/app.js',
   'js/board.js',
   'js/chart.js',
   'js/chesscom.js',
   'js/classify.js',
+  'js/coach.js',
   'js/db.js',
   'js/engine.js',
+  'js/export.js',
   'js/lichess.js',
+  'js/notation.js',
   'js/openings.js',
   'js/review.js',
   'js/ui.js',

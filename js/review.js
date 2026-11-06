@@ -1,37 +1,15 @@
 // Écran d'analyse d'une partie.
-import { Chess } from '../vendor/chess.js';
-import { analyzer, buildReview, isComplete, parseGame, summarize } from './analyzer.js';
+import { analyzer, buildReview, ENGINE_NAME, isComplete, parseGame, summarize } from './analyzer.js';
 import { createBoard } from './board.js';
 import { renderChart } from './chart.js';
 import { openingName } from './chesscom.js';
+import { coachReady, deleteCoach, loadCoach, runCoach } from './coach.js';
 import * as db from './db.js';
+import { buildClaudeSummary, copyText } from './export.js';
 import { winPercent } from './lichess.js';
+import { evalText, figurine, figurineInText, pvToSan } from './notation.js';
 import { bookInfo, describeOpening, loadBook, openingGenre } from './openings.js';
 import { BAD_CLASSES, cadence, esc, CLASSES, fmtDate, fmtPct } from './ui.js';
-
-const FIGURES = { K: '♚', Q: '♛', R: '♜', B: '♝', N: '♞' };
-const figurine = (san) => san.replace(/[KQRBN]/g, (c) => `${FIGURES[c]}︎`);
-
-export function pvToSan(fen, pv) {
-  const chess = new Chess(fen);
-  const out = [];
-  for (const uci of pv.split(' ').filter(Boolean)) {
-    try {
-      const move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
-      out.push(move.san);
-    } catch { break; }
-  }
-  return out;
-}
-
-function evalText(score, color) {
-  if (!score) return '';
-  if (score.over) return score.over === color ? 'Mat' : 'Maté';
-  const sign = color === 'w' ? 1 : -1;
-  if (score.mate !== undefined) return `${score.mate * sign > 0 ? '+' : '-'}M${Math.abs(score.mate)}`;
-  const pawns = (score.cp * sign) / 100;
-  return `${pawns > 0 ? '+' : ''}${pawns.toFixed(1).replace('.', ',')}`;
-}
 
 export async function showReview(root, game, settings, helpers) {
   const parsed = parseGame(game);
@@ -45,6 +23,7 @@ export async function showReview(root, game, settings, helpers) {
   const review = () => buildReview(parsed, evals, book, my, memo);
   let reviewed = review();
   let ply = 0;
+  const coach = { data: await loadCoach(game.uuid), loading: false, error: null };
 
   const resultWord = { win: 'Victoire', loss: 'Défaite', draw: 'Nulle' }[game.result];
   root.innerHTML = `
@@ -76,6 +55,7 @@ export async function showReview(root, game, settings, helpers) {
           <button data-jump="-1">← Mon erreur précédente</button>
           <button data-jump="1">Mon erreur suivante →</button>
         </div>
+        <section class="panel" id="coach"></section>
         <section class="panel chart-panel"><h2>Mes chances de gain</h2><div id="chart"></div>
           <p class="muted small">Point plein : ton coup. Rond vide : coup adverse.</p></section>
         <section class="panel" id="summary"></section>
@@ -183,7 +163,8 @@ export async function showReview(root, game, settings, helpers) {
       </div>
       <p class="note">${esc(note)}</p>
       <p class="muted">${who} · Mes chances : ${fmtPct(beforePct)} → ${fmtPct(afterPct)} · Éval. ${evalText(e.s, my)}</p>
-      ${best}`;
+      ${best}
+      ${coach.data?.moments?.[ply] ? `<p class="coach-text"><strong>Coach :</strong> ${figurineInText(esc(coach.data.moments[ply]))}</p>` : ''}`;
   }
 
   function renderCurve() {
@@ -221,9 +202,67 @@ export async function showReview(root, game, settings, helpers) {
         ? `<button class="link" id="deeper">Réanalyser en profondeur ${settings.depth}</button>` : ''}`;
     root.querySelector('#deeper')?.addEventListener('click', async () => {
       await db.del('analyses', game.uuid);
+      await deleteCoach(game.uuid);
       helpers.rerender();
       analyzer.start(game, { depth: settings.depth });
     });
+  }
+
+  function openingTitle() {
+    const described = describeOpening(gameOpening().name);
+    return `${described.title}${described.variation ? `, ${described.variation}` : ''}`;
+  }
+
+  async function askCoach() {
+    coach.loading = true;
+    coach.error = null;
+    renderCoach();
+    try {
+      coach.data = await runCoach({
+        game, parsed, reviewed, evals, openingTitle: openingTitle(), settings,
+      });
+    } catch (err) {
+      console.error(err);
+      coach.error = err.message || 'Le coach n\'a pas pu répondre.';
+    }
+    coach.loading = false;
+    if (!root.isConnected) return;
+    renderCoach();
+    renderPosition();
+  }
+
+  async function copyForClaude(button) {
+    const { accuracy, counts } = summarize(reviewed, evals);
+    const text = buildClaudeSummary({
+      game, parsed, reviewed, evals, doc, accuracy, counts,
+      opening: openingTitle(), engine: ENGINE_NAME, username: settings.username,
+    });
+    const done = await copyText(text);
+    button.textContent = done ? 'Copié !' : 'Copie impossible';
+    setTimeout(() => { if (button.isConnected) button.textContent = 'Copier pour Claude'; }, 2000);
+  }
+
+  function renderCoach() {
+    const panel = $('coach');
+    if (!isComplete(doc)) {
+      panel.innerHTML = '<h2>Coach</h2><p class="muted">Disponible à la fin de l\'analyse.</p>';
+      return;
+    }
+    let body;
+    if (coach.data) {
+      body = `<p>${figurineInText(esc(coach.data.resume || 'Touche un moment clé pour lire l\'explication.'))}</p>
+        <p class="muted small">Les explications apparaissent sur tes moments clés.</p>`;
+    } else if (coach.loading) {
+      body = '<p class="muted">Le coach prépare ses explications…</p>';
+    } else if (!coachReady(settings)) {
+      body = '<p class="muted">Ajoute ta clé Gemini dans les réglages pour obtenir les explications. L\'analyse Stockfish reste disponible sans clé.</p><a class="link" href="#/reglages">Ouvrir les réglages</a>';
+    } else {
+      body = `${coach.error ? `<p class="error">${esc(coach.error)}</p>` : ''}
+        <button class="primary" id="askCoach">${coach.error ? 'Réessayer' : 'Explications du coach'}</button>`;
+    }
+    panel.innerHTML = `<h2>Coach</h2>${body}<button class="secondary" id="copyClaude">Copier pour Claude</button>`;
+    panel.querySelector('#askCoach')?.addEventListener('click', askCoach);
+    panel.querySelector('#copyClaude').addEventListener('click', (e) => copyForClaude(e.currentTarget));
   }
 
   function renderMoves() {
@@ -288,6 +327,7 @@ export async function showReview(root, game, settings, helpers) {
     if (doc) evals = doc.evals;
     reviewed = review();
     renderStatus();
+    renderCoach();
     renderSummary();
     renderMoves();
     renderPosition();
@@ -308,6 +348,7 @@ export async function showReview(root, game, settings, helpers) {
   document.addEventListener('keydown', onKey);
 
   renderStatus();
+  renderCoach();
   renderSummary();
   renderMoves();
   renderPosition();

@@ -1,4 +1,5 @@
 // Point d'entrée : écrans, réglages, mise à jour de la PWA.
+import { DEFAULT_PROVIDER, PROVIDERS } from './ai.js';
 import { analyzer, ENGINE_NAME } from './analyzer.js';
 import { ChessComError, listGames, loadOlder, openingName, refresh } from './chesscom.js';
 import * as db from './db.js';
@@ -11,7 +12,9 @@ const FILTERS = [
   ['all', 'Toutes'], ['bullet', 'Bullet'], ['blitz', 'Blitz'], ['rapid', 'Rapide'],
 ];
 const DEFAULT_DEPTH = 14;
-const settings = { username: '', depth: DEFAULT_DEPTH, filter: 'all' };
+const settings = {
+  username: '', depth: DEFAULT_DEPTH, filter: 'all', aiProvider: DEFAULT_PROVIDER, aiModel: null, aiKeys: {},
+};
 let cleanup = null;
 let hasMore = true;
 let refreshedThisSession = false;
@@ -20,6 +23,9 @@ async function loadSettings() {
   settings.username = await db.kvGet('username', '');
   settings.depth = await db.kvGet('depth', DEFAULT_DEPTH);
   settings.filter = await db.kvGet('filter', 'all');
+  settings.aiProvider = await db.kvGet('aiProvider', DEFAULT_PROVIDER);
+  settings.aiModel = await db.kvGet('aiModel', null);
+  settings.aiKeys = await db.kvGet('aiKeys', {});
 }
 
 function setView(html = '') {
@@ -174,6 +180,8 @@ async function showGame(uuid) {
 }
 
 async function showSettings() {
+  const provider = PROVIDERS[settings.aiProvider];
+  const currentModel = settings.aiModel ?? provider.models[0].id;
   setView(`
     <header class="topbar">
       <a class="icon-btn" href="#/" aria-label="Retour à la liste">←</a>
@@ -190,6 +198,21 @@ async function showSettings() {
         <label class="range"><input id="depth" type="range" min="10" max="18" step="1" value="${settings.depth}">
         <output id="depthValue">${settings.depth}</output></label>
         <p class="muted small">Plus la profondeur est élevée, plus l'analyse est précise et lente. Chaque position est limitée à 10 secondes. Les parties déjà analysées ne changent pas.</p>
+      </section>
+      <section class="panel">
+        <h2>Coach IA</h2>
+        <label class="field">Fournisseur
+          <select id="aiProvider">${Object.values(PROVIDERS).map((p) => `<option value="${p.id}"${p.id === provider.id ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}</select>
+        </label>
+        <label class="field">Modèle
+          <select id="aiModel">${provider.models.map((m) => `<option value="${esc(m.id)}"${m.id === currentModel ? ' selected' : ''}>${esc(m.label)}</option>`).join('')}</select>
+        </label>
+        <label class="field">Clé API
+          <input id="aiKey" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" value="${esc(settings.aiKeys[provider.id] ?? '')}">
+        </label>
+        <p class="muted small">La clé reste sur cet appareil et part uniquement vers ${esc(provider.label)}. <a href="${esc(provider.keyUrl)}" rel="noopener" target="_blank">Créer une clé</a></p>
+        <button class="secondary" id="checkKey">Enregistrer et vérifier la clé</button>
+        <p class="small" id="keyStatus" role="status"></p>
       </section>
       <section class="panel">
         <h2>Données sur ce téléphone</h2>
@@ -210,10 +233,30 @@ async function showSettings() {
     await db.kvSet('depth', settings.depth);
   });
   $('change').addEventListener('click', () => showOnboarding());
+  $('aiModel').addEventListener('change', async (e) => {
+    settings.aiModel = e.target.value;
+    await db.kvSet('aiModel', settings.aiModel);
+  });
+  $('checkKey').addEventListener('click', async () => {
+    const key = $('aiKey').value.trim();
+    const status = $('keyStatus');
+    settings.aiKeys = { ...settings.aiKeys, [provider.id]: key };
+    await db.kvSet('aiKeys', settings.aiKeys);
+    if (!key) { status.textContent = 'Clé supprimée de cet appareil.'; return; }
+    status.textContent = 'Vérification…';
+    try {
+      await provider.checkKey(key);
+      status.textContent = 'Clé reconnue et enregistrée sur cet appareil.';
+    } catch (err) {
+      status.textContent = `Clé enregistrée, mais : ${err.message}`;
+    }
+  });
   $('wipe').addEventListener('click', async () => {
     if (!confirm('Effacer toutes les analyses enregistrées sur ce téléphone ?')) return;
     await analyzer.stop();
     await db.clear('analyses');
+    const keys = await db.kvKeys();
+    await Promise.all(keys.filter((k) => String(k).startsWith('coach:')).map((k) => db.del('kv', k)));
     await db.kvSet('activeAnalysis', null);
     showStorage();
   });
