@@ -19,7 +19,7 @@ async function send(url, options) {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (err) {
     if (err.name === 'AbortError') {
-      throw new AiError('timeout', 'L\'IA met trop de temps à répondre. Garde l\'écran allumé pendant l\'attente, ou essaie l\'autre modèle.');
+      throw new AiError('timeout', 'L\'IA met trop de temps à répondre. Garde l\'écran allumé pendant l\'attente, ou essaie un autre modèle.');
     }
     throw new AiError('network', 'Connexion à l\'IA impossible. Vérifie ton accès à Internet.');
   } finally {
@@ -48,9 +48,9 @@ async function geminiError(res) {
   if (res.status === 429) {
     if (text.includes('perminute')) return new AiError('quota', 'Trop de demandes à Gemini en peu de temps. Réessaie dans une minute.');
     if (text.includes('perday')) {
-      return new AiError('quota', 'Quota gratuit du jour atteint pour ce modèle. Réessaie demain, ou choisis Flash-Lite dans les réglages.');
+      return new AiError('quota', 'Quota gratuit du jour atteint pour ce modèle. Réessaie demain, ou change de modèle dans les réglages.');
     }
-    return new AiError('quota', 'Limite gratuite de Gemini atteinte. Réessaie plus tard, ou choisis Flash-Lite dans les réglages.');
+    return new AiError('quota', 'Limite gratuite de Gemini atteinte. Réessaie plus tard, ou change de modèle dans les réglages.');
   }
   if (res.status === 400) return new AiError('request', 'Gemini a refusé la demande (erreur 400).');
   if (res.status >= 500) return new AiError('server', 'Gemini est momentanément surchargé. Réessaie dans quelques minutes.');
@@ -61,7 +61,7 @@ function geminiText(data) {
   if (data?.promptFeedback?.blockReason) throw new AiError('blocked', 'Gemini a bloqué cette demande. Réessaie plus tard.');
   const candidate = data?.candidates?.[0];
   if (candidate?.finishReason === 'MAX_TOKENS') {
-    throw new AiError('format', 'La réponse de Gemini a été coupée car elle était trop longue. Réessaie ou essaie l\'autre modèle.');
+    throw new AiError('format', 'La réponse de Gemini a été coupée car elle était trop longue. Réessaie ou essaie un autre modèle.');
   }
   const text = (candidate?.content?.parts ?? [])
     .filter((part) => !part.thought && typeof part.text === 'string')
@@ -78,8 +78,9 @@ const gemini = {
   label: 'Google Gemini',
   keyUrl: 'https://aistudio.google.com/apikey',
   models: [
-    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (meilleure qualité)', short: 'Flash' },
-    { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite (quota plus large)', short: 'Flash-Lite' },
+    { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite (conseillé)', short: 'Flash-Lite' },
+    { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash (à essayer)', short: 'Gemini 3.6 Flash' },
+    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (ne répond pas en test)', short: 'Gemini 3.8 Flash' },
   ],
 
   // Ne consomme pas de quota de génération. Google précise qu'elle valide l'existence de la clé.
