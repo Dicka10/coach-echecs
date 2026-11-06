@@ -63,6 +63,7 @@ export async function showReview(root, game, settings, helpers) {
           <button data-go="next" aria-label="Coup suivant">▶</button>
           <button data-go="last" aria-label="Fin">⏭</button>
         </div>
+        <p class="keys muted small">Clavier : ← → pour les coups, ↑ début, ↓ fin</p>
       </div>
       <div class="side-col">
         <section class="panel" id="moveinfo" aria-live="polite"></section>
@@ -70,7 +71,8 @@ export async function showReview(root, game, settings, helpers) {
           <button data-jump="-1">← Mon erreur précédente</button>
           <button data-jump="1">Mon erreur suivante →</button>
         </div>
-        <section class="panel chart-panel"><h2>Mes chances de gain</h2><div id="chart"></div></section>
+        <section class="panel chart-panel"><h2>Mes chances de gain</h2><div id="chart"></div>
+          <p class="muted small">Point plein : ton coup. Rond vide : coup adverse.</p></section>
         <section class="panel" id="summary"></section>
         <section class="panel"><h2>Coups</h2><div class="moves" id="moves"></div></section>
         <p class="opening" id="opening"></p>
@@ -101,8 +103,7 @@ export async function showReview(root, game, settings, helpers) {
       fen: parsed.fens[ply],
       lastMove: move ? { from: move.from, to: move.to } : null,
       arrow,
-      // Le symbole sur l'échiquier ne concerne que mes coups.
-      mark: info && info.color === my ? { cls: info.cls, symbol: CLASSES[info.cls].symbol } : null,
+      mark: info ? { cls: info.cls, symbol: CLASSES[info.cls].symbol } : null,
     });
     renderEvalBar();
     renderMoveInfo(move, info);
@@ -163,7 +164,9 @@ export async function showReview(root, game, settings, helpers) {
   function renderCurve() {
     renderChart($('chart'), {
       points: points(),
-      marks: myMistakes().map((r) => ({ ply: r.ply, cls: r.cls, pct: winPercent(evals[r.ply].s, my) })),
+      marks: reviewed.filter(Boolean).map((r) => ({
+        ply: r.ply, cls: r.cls, mine: r.color === my, pct: winPercent(evals[r.ply].s, my),
+      })),
       current: ply,
       total,
       onSelect: (p) => goTo(p),
@@ -202,7 +205,7 @@ export async function showReview(root, game, settings, helpers) {
     const html = parsed.moves.map((m, i) => {
       const r = reviewed[i];
       const mine = m.color === my;
-      const dot = r && mine ? `<i class="dot cls-${r.cls}"></i>` : '';
+      const dot = r ? `<i class="dot cls-${r.cls}"></i>` : '';
       const num = m.color === 'w' ? `<span class="num">${(i / 2) + 1}.</span>` : '';
       return `${num}<button class="move${mine ? ' mine' : ''}" data-ply="${i + 1}">${dot}${figurine(esc(m.san))}</button>`;
     }).join('');
@@ -271,6 +274,15 @@ export async function showReview(root, game, settings, helpers) {
   const onResize = () => renderCurve();
   window.addEventListener('resize', onResize);
 
+  const onKey = (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.target.matches?.('input, textarea')) return;
+    const target = { ArrowLeft: ply - 1, ArrowRight: ply + 1, ArrowUp: 0, ArrowDown: total }[e.key];
+    if (target === undefined) return;
+    e.preventDefault();
+    goTo(target);
+  };
+  document.addEventListener('keydown', onKey);
+
   renderStatus();
   renderSummary();
   renderMoves();
@@ -284,6 +296,7 @@ export async function showReview(root, game, settings, helpers) {
   return () => {
     analyzer.removeEventListener('change', onChange);
     window.removeEventListener('resize', onResize);
+    document.removeEventListener('keydown', onKey);
   };
 }
 

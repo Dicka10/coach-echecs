@@ -200,6 +200,9 @@ button:disabled { opacity: .5; }
 .chart-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
 .chart-cursor { stroke: var(--text); stroke-width: 1; opacity: .6; }
 .chart-dot { fill: var(--tone); stroke: var(--surface); stroke-width: 1; }
+.chart-dot.opp { fill: var(--surface); stroke: var(--tone); stroke-width: 2; }
+.keys { display: none; text-align: center; }
+@media (hover: hover) and (pointer: fine) { .keys { display: block; } }
 
 .accuracy { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
 .accuracy > div { background: var(--surface-2); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; min-width: 0; }

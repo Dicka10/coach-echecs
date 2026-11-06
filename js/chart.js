@@ -31,7 +31,7 @@ export function renderChart(container, { points, marks, current, total, onSelect
   }
   for (const m of marks) {
     if (!SEVERE.has(m.cls)) continue;
-    add('circle', { cx: xAt(m.ply), cy: yAt(m.pct), r: 3.5, class: `chart-dot cls-${m.cls}` });
+    add('circle', { cx: xAt(m.ply), cy: yAt(m.pct), r: 3.5, class: `chart-dot cls-${m.cls}${m.mine ? '' : ' opp'}` });
   }
   add('line', { x1: xAt(current), x2: xAt(current), y1: 0, y2: height, class: 'chart-cursor' });
 
