@@ -8,6 +8,10 @@ Application web gratuite d'analyse de parties Chess.com, utilisable sur téléph
 - Calcule la précision avec la méthode publique de Lichess.
 - Classe les coups avec les seuils publics de Chess.com. Les règles de Génial, Très bon et Occasion manquée, que Chess.com ne chiffre pas, sont des choix de cette appli (`RULES` dans `js/classify.js`).
 
+- Explique les moments clés avec Gemini, en un seul appel par partie, à partir des données de Stockfish.
+- Dresse un bilan sur les N dernières parties et un plan de progression à partir de statistiques agrégées.
+- Copie un résumé compact à coller dans Claude.
+
 Aucune clé n'est présente dans ce dépôt. Elles restent uniquement sur l'appareil de l'utilisateur.
 
 ## Mettre à jour

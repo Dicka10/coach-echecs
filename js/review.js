@@ -10,7 +10,7 @@ import { buildClaudeSummary, copyText } from './export.js';
 import { winPercent } from './lichess.js';
 import { evalText, figurine, figurineInText, pvToSan } from './notation.js';
 import { bookInfo, describeOpening, loadBook, openingGenre } from './openings.js';
-import { BAD_CLASSES, cadence, esc, CLASSES, fmtDate, fmtPct } from './ui.js';
+import { BAD_CLASSES, cadence, coachBox, esc, CLASSES, fmtDate, fmtPct } from './ui.js';
 
 export async function showReview(root, game, settings, helpers) {
   const parsed = parseGame(game);
@@ -23,8 +23,8 @@ export async function showReview(root, game, settings, helpers) {
   const memo = new Map();
   const review = () => buildReview(parsed, evals, book, my, memo);
   let reviewed = review();
-  let ply = 0;
-  const coach = { data: await loadCoach(game.uuid), loading: false, error: null };
+  let ply = Math.min(helpers.startPly ?? 0, total);
+  const coach ={ data: await loadCoach(game.uuid), loading: false, error: null };
 
   const resultWord = { win: 'Victoire', loss: 'Défaite', draw: 'Nulle' }[game.result];
   root.innerHTML = `
@@ -165,7 +165,7 @@ export async function showReview(root, game, settings, helpers) {
       <p class="note">${esc(note)}</p>
       <p class="muted">${who} · Mes chances : ${fmtPct(beforePct)} → ${fmtPct(afterPct)} · Éval. ${evalText(e.s, my)}</p>
       ${best}
-      ${coach.data?.moments?.[ply] ? `<p class="coach-text"><strong>Coach :</strong> ${figurineInText(esc(coach.data.moments[ply]))}</p>` : ''}`;
+      ${coach.data?.moments?.[ply] ? coachBox(`<p>${figurineInText(esc(coach.data.moments[ply]))}</p>`) : ''}`;
   }
 
   function renderCurve() {
@@ -260,7 +260,7 @@ export async function showReview(root, game, settings, helpers) {
     }
     let body;
     if (coach.data) {
-      body = `<p>${figurineInText(esc(coach.data.resume || 'Touche un moment clé pour lire l\'explication.'))}</p>
+      body = `${coachBox(`<p>${figurineInText(esc(coach.data.resume || 'Touche un moment clé pour lire l\'explication.'))}</p>`)}
         <p class="muted small">Les explications apparaissent sur tes moments clés.</p>`;
     } else if (coach.loading) {
       body = '<p class="muted">Le coach prépare ses explications…</p>';

@@ -104,35 +104,35 @@ function explainBad(ctx, facts) {
   const subject = mine ? 'Tu' : "L'adversaire";
   const verb = (second, third) => (mine ? second : third);
   const allowed = sideMate(cur.s, color);
-  if (cur.s.over && cur.s.over !== color) return `${subject} ${verb('te fais', 'se fait')} mater.`;
-  if (allowed < 0) return `${subject} ${verb('laisses', 'laisse')} un mat en ${-allowed}.`;
+  if (cur.s.over && cur.s.over !== color) return ['mate_allowed', `${subject} ${verb('te fais', 'se fait')} mater.`];
+  if (allowed < 0) return ['mate_allowed', `${subject} ${verb('laisses', 'laisse')} un mat en ${-allowed}.`];
   const hadMate = sideMate(prev.s, color);
-  if (hadMate > 0 && allowed <= 0) return `${subject} ${verb('rates', 'rate')} un mat en ${hadMate}.`;
+  if (hadMate > 0 && allowed <= 0) return ['missed_mate', `${subject} ${verb('rates', 'rate')} un mat en ${hadMate}.`];
 
   const { netLoss, gain, played, best } = facts;
   if (netLoss >= 3) {
     const piece = heaviest(played.lost.filter((p) => VALUE[p] >= 3 && VALUE[p] <= netLoss + 1));
     const names = mine ? OWN : THEIR;
-    return piece ? `Ce coup perd ${names[piece]}.` : 'Ce coup perd du matériel.';
+    return ['piece', piece ? `Ce coup perd ${names[piece]}.` : 'Ce coup perd du matériel.'];
   }
-  if (netLoss === 2) return `Ce coup perd la qualité : une tour contre une pièce plus faible.`;
-  if (netLoss === 1) return 'Ce coup perd un pion.';
+  if (netLoss === 2) return ['exchange', 'Ce coup perd la qualité : une tour contre une pièce plus faible.'];
+  if (netLoss === 1) return ['pawn', 'Ce coup perd un pion.'];
   if (gain >= 1) {
     const piece = heaviest(best.won) ?? 'p';
-    return `${subject} ${verb('rates', 'rate')} le gain ${GAIN[piece]}.`;
+    return ['missed_gain', `${subject} ${verb('rates', 'rate')} le gain ${GAIN[piece]}.`];
   }
   if (previous && PREVIOUS_BAD.has(previous.cls)) {
-    return mine ? "Tu ne profites pas de l'erreur adverse." : "L'adversaire ne profite pas de ton erreur.";
+    return ['no_punish', mine ? "Tu ne profites pas de l'erreur adverse." : "L'adversaire ne profite pas de ton erreur."];
   }
   const beforePct = expected(prev.s, color);
   const afterPct = expected(cur.s, color);
   if (beforePct >= 0.4 && afterPct < 0.4) {
-    return mine ? "Pas de perte de matériel, mais l'adversaire prend l'avantage." : 'Pas de perte de matériel, mais tu prends l\'avantage.';
+    return ['positional', mine ? "Pas de perte de matériel, mais l'adversaire prend l'avantage." : 'Pas de perte de matériel, mais tu prends l\'avantage.'];
   }
   if (beforePct > 0.6 && afterPct <= 0.6) {
-    return mine ? 'Ton avantage disparaît, sans perte de matériel.' : "L'avantage adverse disparaît, sans perte de matériel.";
+    return ['positional', mine ? 'Ton avantage disparaît, sans perte de matériel.' : "L'avantage adverse disparaît, sans perte de matériel."];
   }
-  return mine ? 'Ce coup affaiblit ta position, sans perte immédiate de matériel.' : "Ce coup affaiblit la position adverse, sans perte immédiate de matériel.";
+  return ['positional', mine ? 'Ce coup affaiblit ta position, sans perte immédiate de matériel.' : "Ce coup affaiblit la position adverse, sans perte immédiate de matériel."];
 }
 
 const GOOD_NOTES = {
@@ -200,5 +200,6 @@ export function classifyMove(ctx) {
   if ((missedMate || missedChance) && !mateAllowed && facts.netLoss < 3) cls = 'miss';
 
   if (['excellent', 'good'].includes(cls)) return finish(cls);
-  return finish(cls, explainBad(ctx, facts));
+  const [kind, note] = explainBad(ctx, facts);
+  return { ...finish(cls, note), kind };
 }

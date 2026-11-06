@@ -1,6 +1,7 @@
 // Point d'entrée : écrans, réglages, mise à jour de la PWA.
 import { DEFAULT_PROVIDER, PROVIDERS } from './ai.js';
 import { analyzer, ENGINE_NAME } from './analyzer.js';
+import { showBilan } from './bilan.js';
 import { ChessComError, listGames, loadOlder, openingName, refresh } from './chesscom.js';
 import * as db from './db.js';
 import { describeOpening } from './openings.js';
@@ -89,6 +90,7 @@ async function showHome() {
     </header>
     <main class="home">
       <div class="install" id="install" hidden></div>
+      <a class="bilan-link" href="#/bilan">Mon bilan et mon plan de progression →</a>
       <div class="chips" role="group" aria-label="Filtrer par cadence">
         ${FILTERS.map(([k, l]) => `<button class="chip${settings.filter === k ? ' active' : ''}" data-filter="${k}">${l}</button>`).join('')}
       </div>
@@ -172,11 +174,16 @@ async function showHome() {
   if (!refreshedThisSession) sync();
 }
 
-async function showGame(uuid) {
+async function showGame(uuid, startPly) {
   const game = await db.get('games', uuid);
   if (!game) { location.hash = '#/'; return; }
   setView();
-  cleanup = await showReview(root, game, settings, { rerender: () => showGame(uuid) });
+  cleanup = await showReview(root, game, settings, { rerender: () => showGame(uuid), startPly });
+}
+
+async function showBilanView() {
+  setView();
+  cleanup = await showBilan(root, settings);
 }
 
 async function showSettings() {
@@ -281,7 +288,7 @@ async function showSettings() {
     await analyzer.stop();
     await db.clear('analyses');
     const keys = await db.kvKeys();
-    await Promise.all(keys.filter((k) => String(k).startsWith('coach:')).map((k) => db.del('kv', k)));
+    await Promise.all(keys.filter((k) => /^(coach|bilanCoach):/.test(String(k))).map((k) => db.del('kv', k)));
     await db.kvSet('activeAnalysis', null);
     showStorage();
   });
@@ -300,9 +307,10 @@ async function showSettings() {
 async function route() {
   const hash = location.hash || '#/';
   if (!settings.username) { showOnboarding(); return; }
-  const game = /^#\/partie\/(.+)$/.exec(hash);
-  if (game) return showGame(decodeURIComponent(game[1]));
+  const game = /^#\/partie\/([^/]+)(?:\/(\d+))?$/.exec(hash);
+  if (game) return showGame(decodeURIComponent(game[1]), Number(game[2] ?? 0));
   if (hash === '#/reglages') return showSettings();
+  if (hash === '#/bilan') return showBilanView();
   return showHome();
 }
 

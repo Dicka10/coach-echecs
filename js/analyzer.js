@@ -44,7 +44,7 @@ export function buildReview(parsed, evals, book, myColor, memo = new Map()) {
     const key = `${i}|${prev.alt === undefined ? 0 : 1}|${previous?.cls ?? ''}`;
     let record = memo.get(key);
     if (!record) {
-      const { cls, note } = classifyMove({
+      const { cls, note, kind } = classifyMove({
         prevFen: parsed.fens[i],
         afterFen: parsed.fens[i + 1],
         move,
@@ -61,6 +61,7 @@ export function buildReview(parsed, evals, book, myColor, memo = new Map()) {
         color: move.color,
         cls,
         note,
+        kind,
         accuracy: moveAccuracy(prev.s, cur.s, move.color),
         before: winPercent(prev.s, move.color),
         after: winPercent(cur.s, move.color),
