@@ -280,16 +280,20 @@ function swVersion() {
   });
 }
 
+let reloadRequested = false;
+
 function showUpdateBanner(worker) {
   const banner = document.getElementById('update');
   banner.hidden = false;
-  banner.querySelector('button').onclick = () => worker.postMessage({ type: 'SKIP_WAITING' });
+  banner.querySelector('button').onclick = () => {
+    reloadRequested = true;
+    worker.postMessage({ type: 'SKIP_WAITING' });
+  };
 }
 
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  const hadController = Boolean(navigator.serviceWorker.controller);
-  const reg = await navigator.serviceWorker.register('sw.js');
+  const reg =await navigator.serviceWorker.register('sw.js');
   const watch = (worker) => {
     worker.addEventListener('statechange', () => {
       if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner(worker);
@@ -299,7 +303,7 @@ async function registerServiceWorker() {
   if (reg.installing) watch(reg.installing);
   reg.addEventListener('updatefound', () => watch(reg.installing));
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (hadController) location.reload();
+    if (reloadRequested) location.reload();
   });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) reg.update().catch(() => {});
