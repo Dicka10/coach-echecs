@@ -1,5 +1,5 @@
 // Augmenter VERSION à chaque déploiement : c'est ce qui déclenche « Nouvelle version disponible ».
-const VERSION = '0.1.5';
+const VERSION = '0.1.6';
 const CACHE = `coach-echecs-${VERSION}`;
 
 const PIECES = ['K', 'Q', 'R', 'B', 'N', 'P'].flatMap((p) => [`vendor/pieces/w${p}.svg`, `vendor/pieces/b${p}.svg`]);
